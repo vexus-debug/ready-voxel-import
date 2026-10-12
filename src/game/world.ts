@@ -259,7 +259,7 @@ export class World {
           Math.abs(this.height(wx + 1, wz) - h), Math.abs(this.height(wx - 1, wz) - h),
           Math.abs(this.height(wx, wz + 1) - h), Math.abs(this.height(wx, wz - 1) - h),
         );
-        const rock = kind !== 1 && ((kind === 0 && this.isKopje(wx, wz) && !this.isMountain(wx, wz)) || slope >= 3 || h > 38 + hash2(wx, wz, this.seed + 61) * 4);
+        const rock = this.kingdomDist(wx, wz) >= K_OUT && kind !== 1 && ((kind === 0 && this.isKopje(wx, wz) && !this.isMountain(wx, wz)) || slope >= 3 || h > 38 + hash2(wx, wz, this.seed + 61) * 4);
         const soil = kind === 1 ? 6 : h > 28 ? 2 : 4;
         const topId = kind === 1 || beach ? B.SAND : kind === 2 ? B.JUNGLE_GRASS : B.GRASS;
         for (let y = 0; y <= h; y++) {
@@ -298,8 +298,8 @@ export class World {
           const dens = meadow > 0.55 ? 0.8 : meadow > 0.45 ? 0.25 : 0.04;
           if (rr < dens) c[idx(x, h + 1, z)] = B.TALLGRASS;
           else if (r2 < 0.05 && meadow > 0.4) c[idx(x, h + 1, z)] = B.FLOWER;
-          else if (rr > 0.997) c[idx(x, h + 1, z)] = B.BOULDER;
-          else if (rr > 0.9955 && x > 0 && z > 0 && x < CH - 1 && z < CH - 1) {
+          else if (rr > 0.997 && this.kingdomDist(wx, wz) >= K_OUT) c[idx(x, h + 1, z)] = B.BOULDER;
+          else if (this.kingdomDist(wx, wz) >= K_OUT && rr > 0.9955 && x > 0 && z > 0 && x < CH - 1 && z < CH - 1) {
             // termite mound: tapered red-clay spire (smoothing rounds it off)
             const mh = 2 + Math.floor(r2 * 3);
             for (let y = 1; y <= mh; y++) put(x, h + y, z, B.DIRT, true);
@@ -332,6 +332,7 @@ export class World {
         const h = heights[z * CH + x], kind = biomes[z * CH + x];
         const top = c[idx(x, h, z)];
         if (h + 14 >= H || c[idx(x, h + 1, z)] === B.WATER) continue;
+        if (this.kingdomDist(wx, wz) < K_OUT + 4) continue;
         const r = hash2(wx, wz, this.seed + 3);
         const hr = hash2(wx, wz, this.seed + 5);
         // date palms around oases and shores
