@@ -770,7 +770,7 @@ export function Game() {
         />
       </Canvas>
       <HUD />
-      {ui2.locked && !ui2.dead && touch.enabled && <TouchControls />}
+      {ui2.locked && !ui2.dead && touch.enabled && !mapView.open && <TouchControls />}
     </div>
   );
 }

@@ -53,8 +53,6 @@ export function HUD() {
         {isNight ? "☾ Night" : "☀ Day"} · {clockLabel(ui.time)}
       </div>
 
-      {ui.locked && <MiniMap />}
-      <RealmMap />
 
       {/* crosshair */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-3xl leading-none drop-shadow">+</div>
@@ -150,6 +148,8 @@ export function HUD() {
           </button>
         </div>
       )}
+      <MiniMap />
+      <RealmMap />
     </div>
   );
 }
