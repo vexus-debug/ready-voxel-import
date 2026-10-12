@@ -1,3 +1,4 @@
+import { mapView } from "./landmarks";
 import { useRef, useState } from "react";
 import { touch } from "./touch";
 import { saveGame, ui, emit, useUI } from "./state";
@@ -79,11 +80,12 @@ export function TouchControls() {
         </div>
       )}
       <button
-        className={`${btn} absolute right-4 top-4 h-11 w-11`}
+        className={`${btn} absolute right-40 top-4 h-11 w-11`}
         onClick={() => { ui.locked = false; emit(); saveGame(); }}
       >
         II
       </button>
+      <button aria-label="Open map" className="pointer-events-auto absolute right-4 top-4 h-36 w-32 rounded-full" onPointerDown={(e) => { e.preventDefault(); mapView.open = true; emit(); }} />
       <div className="absolute bottom-32 right-4 flex flex-col items-end gap-3">
         <button
           className={`${btn} h-16 w-16`}
