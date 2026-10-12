@@ -7,6 +7,10 @@ import { B, BLOCKS, ATLAS_COLS, isTransparent, isPassable, isNatural, isPlant } 
 export const CH = 16;
 export const H = 64;
 export const WATER_LEVEL = 15;
+// kingdom: centred on the citadel, 200x200 inside a 3-thick wall
+export const K_CX = 24 + 14, K_CZ = 0, K_HALF = 100, WALL_T = 3;
+const K_OUT = K_HALF + 12; // flat apron outside the wall
+const K_FADE = 28; // blend back into natural terrain
 
 export function hash2(x: number, z: number, seed: number) {
   let h = Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(seed, 982451653);
@@ -102,12 +106,72 @@ export class World {
     return this.findDry(ox + (CASTLE_SIZE[0] >> 1), oz + CASTLE_SIZE[2] + 6);
   }
 
+  // ---- Kingdom: flattened 200x200 interior ringed by a fortified wall ----
+  private kBase: number | null = null;
+  /** ground level of the flattened kingdom */
+  kingdomGround() {
+    if (this.kBase !== null) return this.kBase;
+    let sum = 0, n = 0;
+    for (let z = -K_HALF; z <= K_HALF; z += 8) for (let x = -K_HALF; x <= K_HALF; x += 8) { sum += this.computeHeight(K_CX + x, K_CZ + z); n++; }
+    return (this.kBase = Math.max(WATER_LEVEL + 3, Math.min(26, Math.round(sum / n))));
+  }
+  /** Chebyshev distance from kingdom centre */
+  kingdomDist(x: number, z: number) { return Math.max(Math.abs(x - K_CX), Math.abs(z - K_CZ)); }
+  private stampKingdomWall(cx: number, cz: number, c: Uint8Array) {
+    const G = this.kingdomGround();
+    const x0 = cx * CH, z0 = cz * CH;
+    if (x0 + CH < K_CX - K_OUT || x0 > K_CX + K_OUT || z0 + CH < K_CZ - K_OUT || z0 > K_CZ + K_OUT) return;
+    const WALL_H = 11, TOWER_H = 17;
+    for (let lz = 0; lz < CH; lz++)
+      for (let lx = 0; lx < CH; lx++) {
+        const dx = x0 + lx - K_CX, dz = z0 + lz - K_CZ;
+        const ax = Math.abs(dx), az = Math.abs(dz), d = Math.max(ax, az);
+        // towers: corners + every 50 blocks along each side (7x7, centred on wall)
+        const along = ax >= az ? dz : dx; // coordinate running along the side
+        const mid = K_HALF + 2;
+        const onSideBand = d >= mid - 3 && d <= mid + 3;
+        const tPos = Math.round(along / 50) * 50;
+        const isCornerT = ax >= mid - 3 && ax <= mid + 3 && az >= mid - 3 && az <= mid + 3;
+        const isTower = onSideBand && (isCornerT || (Math.abs(along - tPos) <= 3 && tPos !== 0));
+        const inWall = d > K_HALF && d <= K_HALF + WALL_T;
+        if (!isTower && !inWall) continue;
+        // gatehouse in the middle of each side
+        const gate = Math.abs(along) <= 2 && !isCornerT;
+        const top = isTower ? TOWER_H : WALL_H;
+        const hollowTower = isTower && Math.max(Math.abs(ax - mid), 0) <= 2 && (isCornerT ? Math.max(Math.abs(ax - mid), Math.abs(az - mid)) <= 2 : Math.abs(along - tPos) <= 2 && Math.abs(d - mid) <= 2);
+        for (let y = 1; y <= G - 1; y++) if (c[idx(lx, y, lz)] === 0 || c[idx(lx, y, lz)] === B.WATER) c[idx(lx, y, lz)] = B.COBBLE;
+        for (let h = 0; h <= top + 1; h++) {
+          const y = G + h;
+          if (y >= H) break;
+          let id: number = h === 0 ? B.COBBLE : hash2(x0 + lx, y * 31 + z0 + lz, this.seed + 7) < 0.12 ? B.MOSSY_BRICK : B.STONE_BRICK;
+          if (gate && h >= 1 && h <= 7 && !(h === 7 && Math.abs(along) === 2)) id = 0; // arched opening
+          if (hollowTower && h >= 1 && h < top && !(gate && h <= 7)) id = h % 6 === 0 ? B.PLANKS : 0;
+          if (isTower && !hollowTower && h >= 4 && h < top && h % 5 === 0 && ((ax >= az ? Math.abs(along - tPos) : 9) === 0 || d === mid + 3)) id = B.GLASS; // arrow slits
+          if (h === top + 1) {
+            // crenellations: merlons on the outer/inner edge, alternating
+            const edge = isTower ? d === mid + 3 || d === mid - 3 || (!isCornerT && Math.abs(along - tPos) === 3) || (isCornerT && (ax === mid + 3 || az === mid + 3 || ax === mid - 3 || az === mid - 3))
+              : d === K_HALF + WALL_T || d === K_HALF + 1;
+            id = edge && ((x0 + lx + z0 + lz) & 1) === 0 ? B.STONE_BRICK : 0;
+          }
+          if (h === top && !isTower) id = B.COBBLE; // walkway
+          c[idx(lx, y, lz)] = id;
+        }
+      }
+  }
+
   private hcache = new Map<number, number>();
   height(x: number, z: number) {
     const key = x * 100003 + z;
     let v = this.hcache.get(key);
     if (v === undefined) {
       v = this.computeHeight(x, z);
+      const d = this.kingdomDist(x, z);
+      if (d < K_OUT + K_FADE) {
+        const G = this.kingdomGround();
+        const t = d <= K_OUT ? 1 : 1 - (d - K_OUT) / K_FADE;
+        const s = t * t * (3 - 2 * t);
+        v = Math.round(v + (G - v) * s);
+      }
       if (this.hcache.size > 400000) this.hcache.clear();
       this.hcache.set(key, v);
     }
@@ -343,6 +407,7 @@ export class World {
         }
       }
     this.stampCastle(cx, cz, c);
+    this.stampKingdomWall(cx, cz, c);
     const e = this.edits[chunkKey(cx, cz)];
     if (e) for (const k in e) c[+k] = e[k];
     return c;
