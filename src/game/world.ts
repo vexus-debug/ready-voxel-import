@@ -2,6 +2,7 @@
 // @ts-nocheck
 import * as THREE from "three";
 import { CASTLE_DATA, CASTLE_SIZE } from "./castleData";
+import { buildTown, townAt, T_R, T_Y, AIRV } from "./town";
 import { B, BLOCKS, ATLAS_COLS, isTransparent, isPassable, isNatural, isPlant } from "./blocks";
 
 export const CH = 16;
@@ -155,6 +156,23 @@ export class World {
           }
           if (h === top && !isTower) id = B.COBBLE; // walkway
           c[idx(lx, y, lz)] = id;
+        }
+      }
+  }
+
+  private town: Uint8Array | null = null;
+  private stampTown(cx: number, cz: number, c: Uint8Array) {
+    const x0 = cx * CH, z0 = cz * CH;
+    if (x0 + CH < K_CX - T_R || x0 > K_CX + T_R || z0 + CH < K_CZ - T_R || z0 > K_CZ + T_R) return;
+    if (!this.town) this.town = buildTown(this.seed);
+    const G = this.kingdomGround();
+    for (let lz = 0; lz < CH; lz++)
+      for (let lx = 0; lx < CH; lx++) {
+        const u = x0 + lx - K_CX, v = z0 + lz - K_CZ;
+        if (u < -T_R || u > T_R || v < -T_R || v > T_R) continue;
+        for (let h = 0; h < T_Y && G + h < H; h++) {
+          const t = townAt(this.town, u, h, v);
+          if (t) c[idx(lx, G + h, lz)] = t === AIRV ? 0 : t;
         }
       }
   }
@@ -409,6 +427,7 @@ export class World {
       }
     this.stampCastle(cx, cz, c);
     this.stampKingdomWall(cx, cz, c);
+    this.stampTown(cx, cz, c);
     const e = this.edits[chunkKey(cx, cz)];
     if (e) for (const k in e) c[+k] = e[k];
     return c;
